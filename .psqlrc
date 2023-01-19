@@ -1,0 +1,73 @@
+-- Found at:
+--     http://www.if-not-true-then-false.com/2009/postgresql-psql-psqlrc-tips-and-tricks/
+--     http://opensourcedbms.com/dbms/psqlrc-psql-startup-file-for-postgres/
+
+\set QUIET ON
+
+\pset pager on
+
+\pset null 'NULL'
+
+\set HISTSIZE 50000
+
+\timing
+
+\encoding unicode
+
+\set PROMPT1 '(%n@%M:%>) [%/] > '
+\set PROMPT2 ''
+
+
+\set QUIET OFF
+
+\echo '\nCurrent Host Server Date Time : '`date` '\n'
+
+\echo 'Administrative queries:\n'
+\echo '\t\t\t:settings\t-- Server Settings'
+\echo '\t\t\t:conninfo\t-- Server connections'
+\echo '\t\t\t:activity\t-- Server activity'
+\echo '\t\t\t:locks\t\t-- Lock info'
+\echo '\t\t\t:waits\t\t-- Waiting queires'
+\echo '\t\t\t:dbsize\t\t-- Database Size'
+\echo '\t\t\t:tablesize\t-- Tables Size'
+\echo '\t\t\t:uptime\t\t-- Server uptime'
+\echo '\t\t\t:gt\t\t-- Google Columnar Cache Table'
+\echo '\t\t\t:gc\t\t-- Google Columnar Cache Columns'
+\echo '\t\t\t:menu\t\t-- Help Menu'
+\echo '\t\t\t\\h\t\t-- Help with SQL commands'
+\echo '\t\t\t\\?\t\t-- Help with psql commands\n'
+
+\echo 'Development queries:\n'
+\echo '\t\t\t:sp\t\t-- Current Search Path'
+\echo '\t\t\t:clear\t\t-- Clear screen'
+\echo '\t\t\t:ll\t\t-- List\n'
+
+-- Administration queries
+
+\set menu '\\i ~/.psqlrc'
+
+\set settings 'select name, setting,unit,context from pg_settings;'
+
+\set locks  'SELECT bl.pid AS blocked_pid, a.usename AS blocked_user, kl.pid AS blocking_pid, ka.usename AS blocking_user, a.query AS blocked_statement FROM pg_catalog.pg_locks bl JOIN pg_catalog.pg_stat_activity a ON bl.pid = a.pid JOIN pg_catalog.pg_locks kl JOIN pg_catalog.pg_stat_activity ka ON kl.pid = ka.pid ON bl.transactionid = kl.transactionid AND bl.pid != kl.pid WHERE NOT bl.granted;'
+
+\set conninfo 'select usename, count(*) from pg_stat_activity group by usename;'
+
+\set activity 'select datname, pid, usename, application_name,client_addr, client_hostname, client_port, query, state from pg_stat_activity;'
+
+\set waits 'SELECT pg_stat_activity.pid, pg_stat_activity.query, pg_stat_activity.waiting, now() - pg_stat_activity.query_start AS \"totaltime\", pg_stat_activity.backend_start FROM pg_stat_activity WHERE pg_stat_activity.query !~ \'%IDLE%\'::text AND pg_stat_activity.waiting = true;'
+
+\set dbsize 'SELECT datname, pg_size_pretty(pg_database_size(datname)) db_size FROM pg_database ORDER BY db_size;'
+
+\set tablesize 'SELECT nspname || \'.\' || relname AS \"relation\", pg_size_pretty(pg_relation_size(C.oid)) AS "size" FROM pg_class C LEFT JOIN pg_namespace N ON (N.oid = C.relnamespace) WHERE nspname NOT IN (\'pg_catalog\', \'information_schema\') ORDER BY pg_relation_size(C.oid) DESC LIMIT 40;'
+
+\set uptime 'select now() - pg_postmaster_start_time() AS uptime;'
+
+\set gt 'SELECT n.nspname as \"Schema\",c.relname as \"Name\",CASE c.relkind WHEN \'r\' THEN \'table\' WHEN \'v\' THEN \'view\' WHEN \'m\' THEN \'materialized view\' WHEN \'i\' THEN \'index\' WHEN \'S\' THEN \'sequence\' WHEN \'t\' THEN \'TOAST table\' WHEN \'f\' THEN \'foreign table\' WHEN \'p\' THEN \'partitioned table\' WHEN \'I\' THEN \'partitioned index\' END as \"Type\",pg_catalog.pg_get_userbyid(c.relowner) as \"Owner\", CASE c.relpersistence WHEN \'p\' THEN \'permanent\' WHEN \'t\' THEN \'temporary\' WHEN \'u\' THEN \'unlogged\' END as \"Persistence\", pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) as \"Size\", gcol.status as \"ColumnarCache\", round(gcol.size/1024/1024,2) as \"ColCacheSizeMB\",pg_catalog.obj_description(c.oid, \'pg_class\') as \"Description\" FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace LEFT JOIN pg_catalog.pg_am am ON am.oid = c.relam  INNER JOIN g_columnar_relations gcol on gcol.schema_name = n.nspname and gcol.relation_name = c.relname  AND gcol.status = \'Usable\' WHERE c.relkind IN (\'r\',\'p\',\'\') AND n.nspname <> \'pg_catalog\' AND n.nspname !~ \'^pg_toast\' AND n.nspname <> \'information_schema\'  AND pg_catalog.pg_table_is_visible(c.oid) ORDER BY 1,2;'
+
+\set gc 'SELECT gcols.relation_name as \"TableName\", a.attname,pg_catalog.format_type(a.atttypid, a.atttypmod),(SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)FROM pg_catalog.pg_attrdef d WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef), a.attnotnull,gcols.status as \"ColumnarCache\",round(gcols.size_in_bytes/1024/1024,2) as \"ColCacheSizeMB\" FROM pg_catalog.pg_class c LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace left join pg_catalog.pg_attribute a on a.attrelid = c.oid INNER JOIN g_columnar_columns gcols on gcols.schema_name = n.nspname and gcols.relation_name = c.relname AND gcols.status = \'Usable\' and gcols.column_name = a.attname WHERE pg_catalog.pg_table_is_visible(c.oid) AND a.attnum > 0 AND NOT a.attisdropped ORDER BY a.attnum;'
+
+-- Development queries:
+
+\set sp 'SHOW search_path;'
+\set clear '\\! clear;'
+\set ll '\\! ls -lrt;'
